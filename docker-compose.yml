@@ -8,7 +8,6 @@ services:
     ports:
       - "8888:8888"  # 80 and 443 later
     environment:
-      - "TORNADO_SERVERS=4"
       - "ADDRESS_CACHE=redis"
   backend:
     build:
