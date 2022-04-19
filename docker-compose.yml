@@ -1,0 +1,18 @@
+version: "2" # not sure what podman supports now, but no need for fancy 3.x features
+
+services:
+  tornado-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8888:8888"  # 80 and 443 later
+    environment:
+      - "TORNADO_SERVERS=4"
+      - "ADDRESS_CACHE=redis"
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+  redis:
+    image: "redis:alpine"
