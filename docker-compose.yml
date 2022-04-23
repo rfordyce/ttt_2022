@@ -9,6 +9,7 @@ services:
       - "8888:8888"  # 80 and 443 later
     environment:
       - "ADDRESS_CACHE=redis"
+    stop_grace_period: 1s
   backend:
     build:
       context: .
