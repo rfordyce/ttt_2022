@@ -26,6 +26,7 @@ def read_board(webcam_device):
     print(frame.shape)  # how to pretty print
     print(frame)  # how to pretty print
     # print(np.matrix(frame))
+    return frame
 
 
 def surrender_loop():
@@ -36,6 +37,15 @@ def surrender_loop():
         "clear surrender action series"
 
 
+def img_raw_b64(img):
+    assert img.shape == (480, 640, 3)  # XXX probably no reason to bother with this
+
+    # https://stackoverflow.com/a/40930153/
+    import base64
+    retval, buffer = cv2.imencode('.png', img)
+    return base64.b64encode(buffer)
+
+
 def main(webcam_device):
     # offer to discover webcam device?
     redis_handle = Redis(os.environ["ADDRESS_CACHE"])
@@ -44,8 +54,8 @@ def main(webcam_device):
         # read Q (redis)? (may have explicit moves?)
         state_board = read_board(webcam_device)  # FIXME do we need to pass device?
         # redis_handle(state_board)  # XXX just for display on UI
-        state_board  # XXX noqa
-        redis_handle.set("webcam_view", "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==")  # XXX just for display on UI
+        redis_handle.set("webcam_view", img_raw_b64(state_board))
+        # redis_handle.set("webcam_view", "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==")  # XXX just for display on UI
         if not "check if it's my turn":
             time.sleep(1)  # TODO async?
             continue  # next iteration
