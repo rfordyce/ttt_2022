@@ -13,8 +13,10 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+    environment:
+      - "ADDRESS_CACHE=redis"
     devices:
-      - "/dev/video0:/dev/video0"
-      - "/dev/video1:/dev/video1"  # which is needed?
+      - "/dev/video0:/dev/video0"  # TODO make loading dynamic
+      - "/dev/video1:/dev/video1"  # FIXME is *1 ever needed?
   redis:
     image: "redis:alpine"

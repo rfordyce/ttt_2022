@@ -7,14 +7,18 @@ import tornado.ioloop
 import tornado.web
 import tornado.process
 
-import aioredis
+# apparently modern redis-py now bundles aioredis (wow!)
+# from redis.asyncio import Redis
+from redis import asyncio as aioredis  # FIXME as instructed, but uses builtin name? yuck
 
-template = """\
+TEMPLATE = """\
 <!DOCTYPE html>
 <html>
 <head>
 <body>
-
+    <div>
+        <img src="data:image/png;base64, {webcam_view}" alt="webcam_view" />
+    </div>
 </body>
 </html>
 """
@@ -22,22 +26,35 @@ template = """\
 
 class MainHandler(tornado.web.RequestHandler):
 
-    def initialize(self, redis):
-        self.redis = redis
+    def initialize(self, redis_handle):
+        self.Q = redis_handle
 
-    def get(self):
-        self.write(template)
+    async def get(self):
+        webcam_view = await self.Q.get("webcam_view")
+        self.write(TEMPLATE.format(webcam_view=webcam_view.decode()))  # utf-8 ..autodecode?
 
     def post(self, request):
         response = "foo"
         self.write(response)
 
+    # https://stackoverflow.com/a/33000023/
+    # ws_client.write_message({
+    #     "img": base64.b64encode(img_data),
+    #     "desc": img_description,
+    # })
+
 
 def main():
-    redis = aioredis.from_url(f"redis://{os.environ['ADDRESS_CACHE']}")
-    app = tornado.web.Application([(r"/", MainHandler, {"redis": redis})])
+    app = tornado.web.Application([(
+        r"/",
+        MainHandler,
+        {
+            "redis_handle": aioredis.from_url(f"redis://{os.environ['ADDRESS_CACHE']}"),
+        }
+    )])
     server = tornado.httpserver.HTTPServer(app)
-    server.bind(os.environ["TORNADO_PORT"])
+    # server.bind(os.environ["TORNADO_PORT"])
+    server.bind(8888)  # FIXME this is the default - is it required?
     #server.start(os.environ["TORNADO_SERVER_COUNT"])  # N instances are forked
     server.start()
     tornado.ioloop.IOLoop.current().start()

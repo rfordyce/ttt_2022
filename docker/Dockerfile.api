@@ -1,2 +1,7 @@
 FROM python:3-slim-bullseye
-RUN echo "success"
+RUN pip install --no-cache \
+    redis \
+    tornado
+COPY src/api /opt/api
+WORKDIR /opt/api
+ENTRYPOINT ["python3", "main.py"]

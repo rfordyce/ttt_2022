@@ -4,7 +4,9 @@ RUN apt-get update \
         libgl1 \
         libglib2.0-0 \
     && apt-get clean
-RUN pip install opencv-python
+RUN pip install --no-cache \
+    opencv-python \
+    redis
 COPY src/backend /opt/backend
 WORKDIR /opt/backend
 ENTRYPOINT ["python3", "-u", "backend.py"]
