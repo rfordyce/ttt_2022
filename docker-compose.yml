@@ -13,5 +13,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+    devices:
+      - "/dev/video0:/dev/video0"
+      - "/dev/video1:/dev/video1"  # which is needed?
   redis:
     image: "redis:alpine"

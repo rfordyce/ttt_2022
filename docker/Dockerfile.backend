@@ -1,2 +1,10 @@
 FROM python:3-slim-bullseye
-RUN echo "success"
+RUN apt-get update \
+    && apt-get install -y \
+        libgl1 \
+        libglib2.0-0 \
+    && apt-get clean
+RUN pip install opencv-python
+COPY src/backend /opt/backend
+WORKDIR /opt/backend
+ENTRYPOINT ["python3", "-u", "backend.py"]
