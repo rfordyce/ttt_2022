@@ -5,12 +5,16 @@ import time
 from contextlib import contextmanager
 
 import cv2  # for board reading - should this be trained or ugly dynamic?
-# import numpy as np
+import numpy as np
 from redis import Redis  # for distributed queue
 
 # should this use a display queue and thread?
 #   practically to prefer over gross python logging
 #   otherwise feed into redis queue --> display on API/UI via socket?..
+
+RED   = (0, 0, 255)
+GREEN = (0, 255, 0)
+BLUE  = (255, 0, 0)
 
 
 @contextmanager
@@ -20,6 +24,38 @@ def capture_device(webcam_device="/dev/video0"):
         yield cap
     finally:
         cap.release()
+
+
+def build_template_matchers():
+
+    class TemplateMatcher():
+
+        def __init__(self, path_img, threshold=0.8, color=RED):
+            # TODO allow passing img
+            self.template  = cv2.imread(path_img, cv2.IMREAD_GRAYSCALE)
+            self.threshold = threshold
+            self.color     = color
+
+        def matches(self, img):  # TODO does it make sense for this to be __call__(...)?
+            img_gray = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY)
+            res = cv2.matchTemplate(img_gray, self.template, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= self.threshold)
+            return zip(*loc[::-1]), res * 255.0  # fix TM_CCOEFF_NORMED, 0-1 to greyscale
+
+        def draw(self, img):
+            img = img.copy()
+            w, h = self.template.shape[::-1]  # TODO just make these properties?
+            cutoffs, img_prb = self.matches(img)
+            for pt in cutoffs:
+                cv2.rectangle(img, pt, (pt[0] + w, pt[1] + h), self.color, 2)
+            return img, img_prb
+
+    # load and clean up images for templates
+    return {  # threshold badly tuned for TM_CCOEFF_NORMED
+        "grid": TemplateMatcher("templates/grid_01.bmp", 0.6, BLUE),
+        "O":    TemplateMatcher("templates/O_01.bmp", 0.6, GREEN),
+        "X":    TemplateMatcher("templates/X_01.bmp", 0.7, RED),
+    }
 
 
 def read_board(webcam):
@@ -38,7 +74,8 @@ def surrender_loop():
 
 
 def img_raw_b64(img):
-    assert img.shape == (480, 640, 3)  # XXX probably no reason to bother with this
+    # TODO allow and don't bother .imencode tuple (already converted)
+    # assert img.shape == (480, 640, 3)  # XXX probably no reason to bother with this
 
     # https://stackoverflow.com/a/40930153/
     import base64
@@ -65,6 +102,7 @@ def contourifier(img):
 def main():
     # offer to discover webcam device?
     redis_handle = Redis(os.environ["ADDRESS_CACHE"])
+    matchers = build_template_matchers()
 
     with capture_device() as webcam:
         while True:
@@ -72,8 +110,11 @@ def main():
             frame, board = read_board(webcam)
             redis_handle.set("webcam_view", img_raw_b64(frame))
 
-            img_cnt = contourifier(frame)  # XXX
+            img_cnt, img_prb = matchers["X"].draw(frame)
+            img_cnt, img_prb = matchers["O"].draw(img_cnt)
+            img_cnt, _ = matchers["grid"].draw(img_cnt)
             redis_handle.set("img_cnt", img_raw_b64(img_cnt))
+            redis_handle.set("img_prb", img_raw_b64(img_prb))
 
             if not "check if it's my turn":
                 time.sleep(1)  # TODO async?
