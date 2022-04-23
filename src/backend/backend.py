@@ -50,9 +50,11 @@ def contourifier(img):
     # take a look at
     #   https://stackoverflow.com/a/52865864/
     #   https://docs.opencv.org/4.x/d4/d73/tutorial_py_contours_begin.html
+    #   https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html
     img_grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # extract contours
-    ret, thresh = cv2.threshold(img_grey, 127, 255, 0)  # TODO improve threshold
+    # ret, thresh = cv2.threshold(img_grey, 127, 255, 0)
+    thresh = cv2.adaptiveThreshold(img_grey, 127, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 20)
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     img_cnt = cv2.drawContours(img.copy(), contours, -1, (0, 255, 0), 3)
     # img_cnt = cv2.imencode(".jpg", img_cnt)
