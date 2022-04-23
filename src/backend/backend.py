@@ -46,6 +46,20 @@ def img_raw_b64(img):
     return base64.b64encode(buffer)
 
 
+def contourifier(img):
+    # take a look at
+    #   https://stackoverflow.com/a/52865864/
+    #   https://docs.opencv.org/4.x/d4/d73/tutorial_py_contours_begin.html
+    img_grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # extract contours
+    ret, thresh = cv2.threshold(img_grey, 127, 255, 0)  # TODO improve threshold
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    img_cnt = cv2.drawContours(img.copy(), contours, -1, (0, 255, 0), 3)
+    # img_cnt = cv2.imencode(".jpg", img_cnt)
+
+    return img_cnt
+
+
 def main():
     # offer to discover webcam device?
     redis_handle = Redis(os.environ["ADDRESS_CACHE"])
@@ -55,6 +69,10 @@ def main():
             # read Q (redis)? (may have explicit moves?)
             frame, board = read_board(webcam)
             redis_handle.set("webcam_view", img_raw_b64(frame))
+
+            img_cnt = contourifier(frame)  # XXX
+            redis_handle.set("img_cnt", img_raw_b64(img_cnt))
+
             if not "check if it's my turn":
                 time.sleep(1)  # TODO async?
                 continue  # next iteration
