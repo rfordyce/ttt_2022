@@ -37,7 +37,12 @@ def build_template_matchers():
             self.color     = color
 
         def matches(self, img):  # TODO does it make sense for this to be __call__(...)?
-            img_gray = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY)
+            try:
+                img_gray = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY)
+            except Exception as ex:  # FIXME hack to accept already greyscale images
+                if "Invalid number of channels in input image" not in str(ex):
+                    raise ex
+                img_gray = img.copy()
             res = cv2.matchTemplate(img_gray, self.template, cv2.TM_CCOEFF_NORMED)
             loc = np.where(res >= self.threshold)
             return zip(*loc[::-1]), res * 255.0  # fix TM_CCOEFF_NORMED, 0-1 to greyscale
@@ -53,16 +58,35 @@ def build_template_matchers():
     # load and clean up images for templates
     return {  # threshold badly tuned for TM_CCOEFF_NORMED
         "grid": TemplateMatcher("templates/grid_01.bmp", 0.6, BLUE),
-        "O":    TemplateMatcher("templates/O_01.bmp", 0.6, GREEN),
-        "X":    TemplateMatcher("templates/X_01.bmp", 0.7, RED),
+        "O":    TemplateMatcher("templates/O_01.bmp", 0.2, GREEN),  # XXX horrible need DTM instead
+        "X":    TemplateMatcher("templates/X_01.bmp", 0.2, RED),
     }
+
+
+def board_cleanup(img):
+    # orig = img  # keep a reference
+    img    = img.copy()
+    img    = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # img    = cv2.GaussianBlur(img, (5, 5), 0)
+    # thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    img = cv2.Canny(img, 100, 200)  # sharp cutoff cleanup
+    img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)), iterations=5)
+    # return img, img  # FIXME return cleaned, annotated (histogram?)
+    im1 = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)  # XXX
+    return im1, img  # FIXME return cleaned, annotated (histogram?)
 
 
 def read_board(webcam):
     ret, frame = webcam.read()  # read one frame
+
+    # clean up the image
+    cleaned, annotated = board_cleanup(frame)
+
     # convert to board
     board = []
-    return frame, board
+    return frame, cleaned, annotated, board
+    # return img_frame, img_cnt, board
+    # return img_frame, img_cleaned, board
 
 
 def surrender_loop():
@@ -107,14 +131,15 @@ def main():
     with capture_device() as webcam:
         while True:
             # read Q (redis)? (may have explicit moves?)
-            frame, board = read_board(webcam)
+            frame, cleaned, annotated, board = read_board(webcam)
             redis_handle.set("webcam_view", img_raw_b64(frame))
 
-            img_cnt, img_prb = matchers["X"].draw(frame)
+            img_cnt, img_prb = matchers["X"].draw(cleaned)
             img_cnt, img_prb = matchers["O"].draw(img_cnt)
             img_cnt, _ = matchers["grid"].draw(img_cnt)
             redis_handle.set("img_cnt", img_raw_b64(img_cnt))
             redis_handle.set("img_prb", img_raw_b64(img_prb))
+            # redis_handle.set("img_prb", img_raw_b64(thresh))
 
             if not "check if it's my turn":
                 time.sleep(1)  # TODO async?
