@@ -60,10 +60,41 @@ def build_template_matchers():
 
     # load and clean up images for templates
     return {  # threshold badly tuned for TM_CCOEFF_NORMED
-        "grid": TemplateMatcher("templates/grid_01.bmp", 0.6, BLUE),
+        # "grid": TemplateMatcher("templates/grid_01.bmp", 0.6, BLUE),
         "O":    TemplateMatcher("templates/O_01.bmp", 0.2, GREEN),  # XXX horrible need DTM instead
         "X":    TemplateMatcher("templates/X_01.bmp", 0.2, RED),
     }
+
+
+def rot_crop_contours(img, contours):
+    """ rotate and crop image given its contours
+        logic from https://stackoverflow.com/a/54823710/
+
+        workflow
+         - collect all the contour points into one array  np.vstack()
+         - get minimum rectangle about it                 .minAreaRect()
+         - get 4 points of the rectangle corners          .boxPoints()
+         - get 4 points of corners to map into            [(0,0),(width,height)]
+         - warp and return
+    """
+    rect = cv2.minAreaRect(np.vstack(contours))  # center, (width, height), angle in degrees
+
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+    width  = int(rect[1][0])  # better to expand rect?
+    height = int(rect[1][1])
+
+    src_pts = box.astype("float32")
+    dst_pts = np.array([[0, height-1],
+                        [0, 0],
+                        [width-1, 0],
+                        [width-1, height-1]], dtype="float32")
+    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    img = cv2.warpPerspective(img, M, (width, height))
+
+    # realistically, M is probably required to map into response
+    # this is also a big advantage of rotating and cropping in the same step
+    return img, M
 
 
 def board_cleanup(img):
@@ -75,23 +106,17 @@ def board_cleanup(img):
     img = cv2.Canny(img, 100, 200)  # sharp cutoff cleanup
     img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)), iterations=5)
 
-    # crop image https://stackoverflow.com/a/41159517/
     # FIXME there's probably a much cleaner vector way to do this
     contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    x, y = [], []  # FIXME use v,h instead of x,y (if this is required at all)
-    for contour_line in contours:
-        for contour in contour_line:
-            x.append(contour[0][0])
-            y.append(contour[0][1])
-    x1, x2, y1, y2 = min(x), max(x), min(y), max(y)  # ValueError for bad images
-    img = img[y1:y2, x1:x2]  # perform crop
+    img, M = rot_crop_contours(img, contours)
 
     # resize image to be very small
     v, h = img.shape
     # img = cv2.resize(img, (round(y/x * 25), round(x/y * 25)), interpolation=cv2.INTER_CUBIC)
     # img = cv2.resize(img, (round(y/x * 32), round(x/y * 32)))
     # INTER_LANCZOS4 seems to give good results for O
-    img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)), interpolation=cv2.INTER_LANCZOS4)
+    # img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)), interpolation=cv2.INTER_LANCZOS4)
+    img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)))
 
     # convert back to color (is this necessary?)
     im1 = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)
@@ -154,8 +179,8 @@ def board_parse_wrapper(redis_handle, matchers, webcam):
     redis_handle.set("webcam_view", img_raw_b64(frame))
 
     img_cnt, img_prb = matchers["X"].draw(cleaned)
-    img_cnt, _ = matchers["O"].draw(cleaned)
-    img_cnt, _ = matchers["grid"].draw(cleaned)
+    # img_cnt, _ = matchers["O"].draw(cleaned)
+    # img_cnt, _ = matchers["grid"].draw(cleaned)  # remove
     redis_handle.set("img_cnt", img_raw_b64(img_cnt))
     redis_handle.set("img_prb", img_raw_b64(img_prb))
     # redis_handle.set("img_prb", img_raw_b64(thresh))
