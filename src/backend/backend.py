@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import os
 import time
 from contextlib import contextmanager
@@ -98,13 +99,8 @@ def surrender_loop():
 
 
 def img_raw_b64(img):
-    # TODO allow and don't bother .imencode tuple (already converted)
-    # assert img.shape == (480, 640, 3)  # XXX probably no reason to bother with this
-
     # https://stackoverflow.com/a/40930153/
-    import base64
-    retval, buffer = cv2.imencode('.png', img)
-    return base64.b64encode(buffer)
+    return base64.b64encode(cv2.imencode('.png', img)[1])
 
 
 def contourifier(img):
