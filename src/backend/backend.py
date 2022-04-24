@@ -17,6 +17,8 @@ RED   = (0, 0, 255)
 GREEN = (0, 255, 0)
 BLUE  = (255, 0, 0)
 
+IMG_CMP_SIZE = 32
+
 
 @contextmanager
 def capture_device(webcam_device="/dev/video0"):
@@ -38,13 +40,13 @@ def build_template_matchers():
             self.color     = color
 
         def matches(self, img):  # TODO does it make sense for this to be __call__(...)?
+            img = img.copy()
             try:
-                img_gray = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             except Exception as ex:  # FIXME hack to accept already greyscale images
                 if "Invalid number of channels in input image" not in str(ex):
                     raise ex
-                img_gray = img.copy()
-            res = cv2.matchTemplate(img_gray, self.template, cv2.TM_CCOEFF_NORMED)
+            res = cv2.matchTemplate(img, self.template, cv2.TM_CCOEFF_NORMED)
             loc = np.where(res >= self.threshold)
             return zip(*loc[::-1]), res * 255.0  # fix TM_CCOEFF_NORMED, 0-1 to greyscale
 
@@ -72,9 +74,36 @@ def board_cleanup(img):
     # thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     img = cv2.Canny(img, 100, 200)  # sharp cutoff cleanup
     img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)), iterations=5)
-    # return img, img  # FIXME return cleaned, annotated (histogram?)
-    im1 = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)  # XXX
+
+    # crop image https://stackoverflow.com/a/41159517/
+    # FIXME there's probably a much cleaner vector way to do this
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    x, y = [], []  # FIXME use v,h instead of x,y (if this is required at all)
+    for contour_line in contours:
+        for contour in contour_line:
+            x.append(contour[0][0])
+            y.append(contour[0][1])
+    x1, x2, y1, y2 = min(x), max(x), min(y), max(y)  # ValueError for bad images
+    img = img[y1:y2, x1:x2]  # perform crop
+
+    # resize image to be very small
+    v, h = img.shape
+    # img = cv2.resize(img, (round(y/x * 25), round(x/y * 25)), interpolation=cv2.INTER_CUBIC)
+    # img = cv2.resize(img, (round(y/x * 32), round(x/y * 32)))
+    # INTER_LANCZOS4 seems to give good results for O
+    img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)), interpolation=cv2.INTER_LANCZOS4)
+
+    # convert back to color (is this necessary?)
+    im1 = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)
     return im1, img  # FIXME return cleaned, annotated (histogram?)
+
+
+def img_to_board(img):
+    return []  # XXX
+    assert IMG_CMP_SIZE in img.shape  # should be widest dim and ready
+    v, h = img.shape
+    for pos in range(9):  # should this generate a lookup table? is more or less better? probably less..
+        pass
 
 
 def read_board(webcam):
@@ -84,7 +113,7 @@ def read_board(webcam):
     cleaned, annotated = board_cleanup(frame)
 
     # convert to board
-    board = []
+    board = img_to_board(cleaned)
     return frame, cleaned, annotated, board
     # return img_frame, img_cnt, board
     # return img_frame, img_cleaned, board
@@ -119,6 +148,28 @@ def contourifier(img):
     return img_cnt
 
 
+def board_parse_wrapper(redis_handle, matchers, webcam):
+    # read Q (redis)? (may have explicit moves?)
+    frame, cleaned, annotated, board = read_board(webcam)
+    redis_handle.set("webcam_view", img_raw_b64(frame))
+
+    img_cnt, img_prb = matchers["X"].draw(cleaned)
+    img_cnt, _ = matchers["O"].draw(cleaned)
+    img_cnt, _ = matchers["grid"].draw(cleaned)
+    redis_handle.set("img_cnt", img_raw_b64(img_cnt))
+    redis_handle.set("img_prb", img_raw_b64(img_prb))
+    # redis_handle.set("img_prb", img_raw_b64(thresh))
+
+    if not "check if it's my turn":
+        time.sleep(1)  # TODO async?
+        return  # next iteration
+    "check if game is lost"  # --> surrender action loop
+    "calculate next move"
+    "make next move"
+    "verify move was made correctly"  # stretch goal? --> may help debug high-level
+    # feed back to Q at end of loop?
+
+
 def main():
     # offer to discover webcam device?
     redis_handle = Redis(os.environ["ADDRESS_CACHE"])
@@ -126,25 +177,11 @@ def main():
 
     with capture_device() as webcam:
         while True:
-            # read Q (redis)? (may have explicit moves?)
-            frame, cleaned, annotated, board = read_board(webcam)
-            redis_handle.set("webcam_view", img_raw_b64(frame))
-
-            img_cnt, img_prb = matchers["X"].draw(cleaned)
-            img_cnt, img_prb = matchers["O"].draw(img_cnt)
-            img_cnt, _ = matchers["grid"].draw(img_cnt)
-            redis_handle.set("img_cnt", img_raw_b64(img_cnt))
-            redis_handle.set("img_prb", img_raw_b64(img_prb))
-            # redis_handle.set("img_prb", img_raw_b64(thresh))
-
-            if not "check if it's my turn":
-                time.sleep(1)  # TODO async?
-                continue  # next iteration
-            "check if game is lost"  # --> surrender action loop
-            "calculate next move"
-            "make next move"
-            "verify move was made correctly"  # stretch goal? --> may help debug high-level
-            # feed back to Q at end of loop?
+            try:
+                board_parse_wrapper(redis_handle, matchers, webcam)
+            except Exception as ex:
+                print(f"trapped Exception (image too small?): {repr(ex)}")
+                time.sleep(1)
 
 
 if __name__ == "__main__":
