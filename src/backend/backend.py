@@ -66,37 +66,6 @@ def build_template_matchers():
     }
 
 
-def rot_crop_contours(img, contours):
-    """ rotate and crop image given its contours
-        logic from https://stackoverflow.com/a/54823710/
-
-        workflow
-         - collect all the contour points into one array  np.vstack()
-         - get minimum rectangle about it                 .minAreaRect()
-         - get 4 points of the rectangle corners          .boxPoints()
-         - get 4 points of corners to map into            [(0,0),(width,height)]
-         - warp and return
-    """
-    rect = cv2.minAreaRect(np.vstack(contours))  # center, (width, height), angle in degrees
-
-    box = cv2.boxPoints(rect)
-    box = np.int0(box)
-    width  = int(rect[1][0])  # better to expand rect?
-    height = int(rect[1][1])
-
-    src_pts = box.astype("float32")
-    dst_pts = np.array([[0, height-1],
-                        [0, 0],
-                        [width-1, 0],
-                        [width-1, height-1]], dtype="float32")
-    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-    img = cv2.warpPerspective(img, M, (width, height))
-
-    # realistically, M is probably required to map into response
-    # this is also a big advantage of rotating and cropping in the same step
-    return img, M
-
-
 def board_cleanup(img):
     # orig = img  # keep a reference
     img    = img.copy()
@@ -107,20 +76,27 @@ def board_cleanup(img):
     img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)), iterations=5)
 
     # FIXME there's probably a much cleaner vector way to do this
+    # contours is a list of lists of points of the contour
     contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    img, M = rot_crop_contours(img, contours)
 
-    # resize image to be very small
-    v, h = img.shape
-    # img = cv2.resize(img, (round(y/x * 25), round(x/y * 25)), interpolation=cv2.INTER_CUBIC)
-    # img = cv2.resize(img, (round(y/x * 32), round(x/y * 32)))
-    # INTER_LANCZOS4 seems to give good results for O
-    # img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)), interpolation=cv2.INTER_LANCZOS4)
-    img = cv2.resize(img, (round(h/v * IMG_CMP_SIZE), round(v/h * IMG_CMP_SIZE)))
+    # rotate and crop based upon workflow in https://stackoverflow.com/a/54823710/
+    # workflow
+    #  - collect all the contour points into one array  np.vstack()
+    #  - get minimum rectangle about it                 .minAreaRect()
+    #  - get 4 points of the rectangle corners          .boxPoints()
+    #  - get 4 points of corners to map into            [(0,0),(width,height)]
+    #  - warp and return
+    rect = cv2.minAreaRect(np.vstack(contours))  # center, (width, height), angle in degrees
+    box  = cv2.boxPoints(rect)
+    M_warp = cv2.getPerspectiveTransform(
+        np.int0(box).astype("float32"),
+        np.array([[0,IMG_CMP_SIZE], [0,0], [IMG_CMP_SIZE,0], [IMG_CMP_SIZE,IMG_CMP_SIZE]], dtype="float32")
+    )
+    img = cv2.warpPerspective(img, M_warp, (IMG_CMP_SIZE, IMG_CMP_SIZE))
 
-    # convert back to color (is this necessary?)
-    im1 = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2RGB)
-    return im1, img  # FIXME return cleaned, annotated (histogram?)
+    # realistically, M is probably required to map into response
+    # this is also a big advantage of rotating and cropping in the same step
+    return img, M_warp
 
 
 def img_to_board(img):
@@ -135,11 +111,11 @@ def read_board(webcam):
     ret, frame = webcam.read()  # read one frame
 
     # clean up the image
-    cleaned, annotated = board_cleanup(frame)
+    cleaned, M_warp = board_cleanup(frame)
 
     # convert to board
     board = img_to_board(cleaned)
-    return frame, cleaned, annotated, board
+    return frame, cleaned, M_warp, board
     # return img_frame, img_cnt, board
     # return img_frame, img_cleaned, board
 
@@ -175,7 +151,7 @@ def contourifier(img):
 
 def board_parse_wrapper(redis_handle, matchers, webcam):
     # read Q (redis)? (may have explicit moves?)
-    frame, cleaned, annotated, board = read_board(webcam)
+    frame, cleaned, M_warp, board = read_board(webcam)
     redis_handle.set("webcam_view", img_raw_b64(frame))
 
     img_cnt, img_prb = matchers["X"].draw(cleaned)
