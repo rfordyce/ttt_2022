@@ -15,11 +15,16 @@ TEMPLATE = """\
 <!DOCTYPE html>
 <html>
 <head>
+<!-- use a socket <meta http-equiv="refresh" content="1" />-->
+<style>
+image-rendering: pixelated; /* FUTURE with canvas */
+</style>
+</head>
 <body>
     <div>
         <img src="data:image/png;base64, {webcam_view}" alt="webcam_view" />
-        <img src="data:image/jpeg;base64, {img_cnt}" alt="webcam_view" />
-        <img src="data:image/jpeg;base64, {img_prb}" alt="webcam_view" />
+        <img src="data:image/jpeg;base64, {img_cnt}" alt="webcam_view" width=480 />
+        <img src="data:image/jpeg;base64, {img_prb}" alt="webcam_view" width=480 />
     </div>
 </body>
 </html>
