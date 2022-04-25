@@ -88,9 +88,10 @@ def board_cleanup(img):
     #  - warp and return
     rect = cv2.minAreaRect(np.vstack(contours))  # center, (width, height), angle in degrees
     box  = cv2.boxPoints(rect)
+    # points are probably clockwise
     M_warp = cv2.getPerspectiveTransform(
         np.int0(box).astype("float32"),
-        np.array([[0,IMG_CMP_SIZE], [0,0], [IMG_CMP_SIZE,0], [IMG_CMP_SIZE,IMG_CMP_SIZE]], dtype="float32")
+        np.array([[0,0], [IMG_CMP_SIZE,0], [IMG_CMP_SIZE,IMG_CMP_SIZE], [0,IMG_CMP_SIZE]], dtype="float32")
     )
     img = cv2.warpPerspective(img, M_warp, (IMG_CMP_SIZE, IMG_CMP_SIZE))
 
