@@ -22,6 +22,8 @@ Also plan to use [9-DOF Adafruit BNO055](https://www.adafruit.com/product/2472) 
 
 I also found a terrific 2012-era webcam in a box of parts (Logitech) to use here too
 
+An As Seen On TV™ lightswitch provides consistent lighting from a very small gantry (also hosts webcam)
+
 No Lego was harmed in the making of this project
 
 ## Current Development Stages and Issues!
@@ -41,6 +43,12 @@ Working Demo of workflow to get contours > rotate > crop
 Template discovery works incredibly well if the template is an exact match, otherwise results vary wildly
 
 However, this is somewhat fixed by the board and possible keys being very simplistic
+
+I strongly suspect that a workflow around some sort of bounded matrix comparison for each block and then picking the best of the three choices for it will make detection work well (surprisingly, histogram doesn't seem to work nicely, though it could be misuse on my part)
+- orient and crop reasonably (working!)
+- slice into 9 blocks
+- compare
+- select best match (beware empty may be troublesome to detect)
 
 Exact template matching (and especially note non-detection)
 ![exact_template_matching.png](/_img/exact_template_matching.png)
