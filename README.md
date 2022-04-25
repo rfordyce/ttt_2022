@@ -1,12 +1,14 @@
 # ttt_2022
 
+Play tic-tac-toe with a robot
+
 This is a simple project to familiarize myself again with microcontroller logic, image detection, and generally real-world robotics issues at a very small scale
 
 It's based on Python, Docker, and the cheapest robot arm I could get my hands on quickly
 
 ## Running
 
-WARNING this is under development and will _not_ yet work for you, even if you set your arm up like mine!
+WARNING this is under development and will _not yet_ work for you, even if you set your arm up like mine!
 
 ```shell
 docker-compose up --build --force-recreate --remove-orphans --detach && docker logs gridsolver_backend_1 -f
@@ -38,9 +40,11 @@ No Lego was harmed in the making of this project
 Working Demo of workflow to get contours > rotate > crop
 ![contours_rotate_crop.png](/_img/contours_rotate_crop.png)
 
+(shown the image is rotated a little extra - this is fixed by reordering destination points)
+
 ### Detection
 
-Template discovery works incredibly well if the template is an exact match, otherwise results vary wildly
+Template discovery works incredibly well if the template is taken from the hand-drawn image, otherwise results vary wildly
 
 However, this is somewhat fixed by the board and possible keys being very simplistic
 
@@ -50,13 +54,13 @@ I strongly suspect that a workflow around some sort of bounded matrix comparison
 - compare
 - select best match (beware empty may be troublesome to detect)
 
-Exact template matching (and especially note non-detection)
+Exact template matching with hand-drawn elements (the picture and the templates are _not_ the same, but they were captured from it at a close distance and perspective) .. alas, also note non-detection
 ![exact_template_matching.png](/_img/exact_template_matching.png)
 
 ### Arm Drawing
 
 Arm has some deep pains, largely around it being much too cheap
-- lack of encoders means the position is mostly a guess (perhaps fixed by 9-DOF)
-- fairly spectacular joint slop
+- lack of encoders means the position is mostly a guess (it should be possible to fix this with 9-DOF)
+- fairly spectacular joint slop (hopefully fixed by a good control loop on 9-DOF)
 
 [![IMAGE ALT TEXT](http://img.youtube.com/vi/Q2_ObO06iwE/0.jpg)](http://www.youtube.com/watch?v=Q2_ObO06iwE "Video Title")
